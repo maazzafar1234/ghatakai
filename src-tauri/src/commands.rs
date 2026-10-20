@@ -12,13 +12,16 @@ pub fn get_audio_devices() -> Result<Vec<crate::audio::AudioDevice>, String> {
 }
 
 #[tauri::command]
-pub fn start_recording(device_id: Option<String>) -> Result<(), String> {
-    crate::audio::start_recording(device_id)
+pub fn start_recording(
+    device_id: Option<String>,
+    state: State<'_, crate::audio::RecordingState>,
+) -> Result<(), String> {
+    crate::audio::start_recording(device_id, &*state)
 }
 
 #[tauri::command]
-pub fn stop_recording() -> Result<(), String> {
-    crate::audio::stop_recording()
+pub fn stop_recording(state: State<'_, crate::audio::RecordingState>) -> Result<(), String> {
+    crate::audio::stop_recording(&*state)
 }
 
 #[tauri::command]
@@ -32,6 +35,11 @@ pub fn save_settings(
     payload: SaveSettingsPayload,
 ) -> Result<(), String> {
     store.update(payload.settings)
+}
+
+#[tauri::command]
+pub fn is_recording(state: State<'_, crate::audio::RecordingState>) -> Result<bool, String> {
+    Ok(state.is_recording())
 }
 
 #[tauri::command]
