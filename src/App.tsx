@@ -1,22 +1,81 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Sidebar, TopBar } from './components/Shell';
+import { TranscriptPanel } from './components/TranscriptPanel';
+import { AIPanel } from './components/AIPanel';
+import { SettingsPanel } from './components/SettingsPanel';
+import { RecordingControls } from './components/RecordingControls';
+import { StatusBar } from './components/StatusBar';
+import { ConversationHistory } from './components/ConversationHistory';
+import { PromptCustomization } from '@/components/PromptCustomization';
+import { MeetingDetection } from '@/components/MeetingDetection';
 import {
   getAudioDevices,
   startRecording,
   stopRecording,
   isRecording,
+  getSettings,
+  saveSettings,
+  TranscriptEntry,
   AudioDevice,
 } from '@/lib/tauri';
+import { AlertTriangle } from 'lucide-react';
+import { useCloudAI } from '@/lib/cloudAI';
+import { conversationStore } from '@/lib/conversationStore';
+import {
+  ConversationSession,
+  CloudSTTConfig,
+  CloudLLMConfig,
+} from '@/lib/types';
+
+type View = 'transcript' | 'ai' | 'settings';
+
+interface AppSettings {
+  theme: 'light' | 'dark';
+  overlayOpacity: number;
+  fontSizeIndex: number;
+  microphoneDeviceId: string | null;
+  isPrivate: boolean;
+  isTranscriptOpen: boolean;
+}
 
 function App() {
-  const [devices, setDevices] = useState<AudioDevice[]>([]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [view, setView] = useState<View>('transcript');
   const [recording, setRecording] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [devices, setDevices] = useState<AudioDevice[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings>({
+    theme: 'light',
+    overlayOpacity: 45,
+    fontSizeIndex: 2,
+    microphoneDeviceId: null,
+    isPrivate: true,
+    isTranscriptOpen: true,
+  });
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const currentSession = useMemo(() => conversationStore.getCurrentSession(), [currentSessionId]);
+
+  // Cloud AI hooks
+  const {
+    status: aiStatus,
+    sttConfig,
+    llmConfig,
+    generateLLMResponse,
+  } = useCloudAI({
+    onSTTResult: (text) => {
+      if (currentSession) {
+        conversationStore.addMessage(currentSession.id, 'assistant', text);
+      }
+    },
+    onError: (err) => setError(err),
+  });
 
   useEffect(() => {
     loadDevices();
-    checkRecordingState();
+    loadSettings();
   }, []);
 
   const loadDevices = async () => {
@@ -32,12 +91,28 @@ function App() {
     }
   };
 
-  const checkRecordingState = async () => {
+  const loadSettings = async () => {
     try {
-      const rec = await isRecording();
-      setRecording(rec);
-    } catch {
-      // Ignore errors on initial state check
+      const s = await getSettings();
+      setSettings(s);
+      setSelectedDeviceId(s.microphoneDeviceId);
+    } catch (err) {
+      setError('Failed to load settings: ' + (err as Error).message);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await saveSettings({
+        ...settings,
+        microphoneDeviceId: selectedDeviceId,
+      });
+    } catch (err) {
+      setError('Failed to save settings: ' + (err as Error).message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -60,84 +135,177 @@ function App() {
     }
   };
 
+  const handleAsk = async (question: string) => {
+    if (!question.trim() || aiLoading) return;
+    setAiLoading(true);
+    setError(null);
+
+    if (currentSession) {
+      conversationStore.addMessage(currentSession.id, 'user', question);
+    }
+
+    try {
+      const response = await generateLLMResponse(question);
+      if (currentSession) {
+        conversationStore.addMessage(currentSession.id, 'assistant', response);
+      }
+    } catch (err) {
+      setError('AI request failed: ' + (err as Error).message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleNewSession = () => {
+    const id = conversationStore.createSession('New Conversation');
+    setCurrentSessionId(id);
+  };
+
+  const handleSelectSession = (session: ConversationSession) => {
+    setCurrentSessionId(session.id);
+  };
+
+  const checkRecordingState = async () => {
+    try {
+      const rec = await isRecording();
+      setRecording(rec);
+    } catch {
+      // Ignore errors on initial state check
+    }
+  };
+
   const clearError = useCallback(() => setError(null), []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-      <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 p-4">
-        <h1 className="text-xl font-bold">GhataKai</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          Audio Recording — Microphone Device Discovery
-        </p>
-      </header>
-
-      <main className="flex-1 p-8 max-w-md mx-auto">
-        {error && (
-          <div className="mb-6 rounded bg-red-50 border border-red-100 p-4 text-sm text-red-800 flex items-start gap-3">
-            <span className="flex-shrink-0 w-5 h-5 text-red-500">!</span>
-            <span>{error}</span>
-            <button
-              onClick={clearError}
-              className="ml-auto text-xs text-red-600 hover:underline"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
-
-        <div className="space-y-6">
-          <section>
-            <h2 className="text-lg font-semibold mb-3">Microphone Device</h2>
-            {loading ? (
-              <p className="text-sm text-slate-500">Loading devices...</p>
-            ) : devices.length === 0 ? (
-              <p className="text-sm text-slate-500">No microphone devices found.</p>
-            ) : (
-              <select
-                value={selectedDeviceId ?? ''}
-                onChange={(e) =>
-                  setSelectedDeviceId(e.target.value || null)
-                }
-                className="w-full px-3 py-2 border border-slate-300 rounded bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-500"
-              >
-                <option value="">Default system microphone</option>
-                {devices.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
+    <div className="min-h-screen flex flex-col bg-gk-bg">
+      <TopBar onMenu={() => {}} />
+      <div className="flex-1 flex overflow-hidden">
+        <Sidebar activePath={`/${view}`} onNav={(path: string) => setView(path as View)} />
+        <div className="flex-1 flex flex-col overflow-hidden bg-gk-bg">
+          <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+            {view === 'transcript' && (
+              <div className="space-y-6">
+                <div>
+                  <h1 className="text-2xl font-bold text-gk-text">Transcript</h1>
+                  <p className="text-sm text-gk-text-muted mt-1">
+                    View and manage your transcript entries.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2 gk-card">
+                    <div className="p-4 border-b border-gk-border/50">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-medium text-gk-text">Live transcript</h3>
+                        <span className="text-xs font-medium uppercase tracking-wider text-gk-primary">
+                          Sample data — STT not yet integrated
+                        </span>
+                      </div>
+                      <TranscriptPanel entries={[]} recording={recording} />
+                    </div>
+                  </div>
+                  <div className="lg:col-span-1">
+                    <RecordingControls
+                      recording={recording}
+                      devices={devices}
+                      selectedDeviceId={selectedDeviceId}
+                      loading={loading}
+                      error={error}
+                      onSelectDevice={setSelectedDeviceId}
+                      onToggleRecording={handleToggleRecording}
+                    />
+                    <StatusBar
+                      recording={recording}
+                      permission={settings.isPrivate ? 'granted' : 'unknown'}
+                      error={error}
+                      devices={devices.length}
+                    />
+                  </div>
+                </div>
+                {error && (
+                  <div className="rounded-gk bg-red-50 border border-red-100 p-4 text-sm text-red-800 flex items-start gap-3">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>{error}</span>
+                    <button
+                      onClick={clearError}
+                      className="ml-2 text-xs text-red-600 hover:underline"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
-          </section>
-
-          <section>
-            <h2 className="text-lg font-semibold mb-3">Recording</h2>
-            <button
-              onClick={handleToggleRecording}
-              disabled={loading}
-              className={`w-full py-3 px-6 text-lg font-medium rounded-lg transition-colors ${
-                recording
-                  ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'bg-slate-600 text-white hover:bg-slate-700'
-              }`}
-            >
-              {loading
-                ? recording
-                  ? 'Stopping...'
-                  : 'Starting...'
-                : recording
-                ? 'Stop Recording'
-                : 'Start Recording'}
-            </button>
-            <p className="text-sm text-slate-500 mt-2">
-              Recording state: <strong>{recording ? 'Active' : 'Idle'}</strong>
-            </p>
-            <p className="text-xs text-slate-400">
-              Audio is captured locally. No recordings are transmitted externally.
-            </p>
-          </section>
+            {view === 'ai' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-4">
+                  <ConversationHistory
+                    currentSessionId={currentSessionId}
+                    onSelectSession={handleSelectSession}
+                    onNewSession={handleNewSession}
+                  />
+                </div>
+                <div className="lg:col-span-8">
+                  <AIPanel
+                    session={currentSession}
+                    onSend={(content: string) => handleAsk(content)}
+                    loading={aiLoading}
+                    sttConfig={sttConfig}
+                    llmConfig={llmConfig}
+                    aiStatus={aiStatus}
+                  />
+                </div>
+              </div>
+            )}
+            {view === 'settings' && (
+              <div className="space-y-6 max-w-4xl">
+                <div>
+                  <h1 className="text-2xl font-bold text-gk-text">Settings</h1>
+                  <p className="text-sm text-gk-text-muted mt-1">
+                    Configure appearance, audio, privacy, and AI integration options.
+                  </p>
+                </div>
+                <SettingsPanel
+                  settings={settings}
+                  audioDevices={devices}
+                  loading={loading}
+                  error={error}
+                  onChange={(key, value) => setSettings((prev) => ({ ...prev, [key]: value }))}
+                  onSave={handleSaveSettings}
+                  onReset={() => {
+                    setSettings({
+                      theme: 'light',
+                      overlayOpacity: 45,
+                      fontSizeIndex: 2,
+                      microphoneDeviceId: null,
+                      isPrivate: true,
+                      isTranscriptOpen: true,
+                    });
+                    setSelectedDeviceId(null);
+                  }}
+                />
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    <PromptCustomization onSelectTemplate={() => {}} />
+                  </div>
+                  <div className="lg:col-span-1">
+                    <MeetingDetection
+                      status={{
+                        enabled: settings.isPrivate,
+                        detectedApps: [],
+                        currentMeeting: null,
+                        confidence: 0,
+                        lastChecked: null,
+                      }}
+                      onToggle={() => setSettings((prev) => ({ ...prev, isPrivate: !prev.isPrivate }))}
+                      onRefresh={() => {}}}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
