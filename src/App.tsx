@@ -12,20 +12,14 @@ import {
   getAudioDevices,
   startRecording,
   stopRecording,
-  isRecording,
   getSettings,
   saveSettings,
-  TranscriptEntry,
   AudioDevice,
 } from '@/lib/tauri';
 import { AlertTriangle } from 'lucide-react';
 import { useCloudAI } from '@/lib/cloudAI';
 import { conversationStore } from '@/lib/conversationStore';
-import {
-  ConversationSession,
-  CloudSTTConfig,
-  CloudLLMConfig,
-} from '@/lib/types';
+import { ConversationSession } from '@/lib/types';
 
 type View = 'transcript' | 'ai' | 'settings';
 
@@ -165,15 +159,6 @@ function App() {
     setCurrentSessionId(session.id);
   };
 
-  const checkRecordingState = async () => {
-    try {
-      const rec = await isRecording();
-      setRecording(rec);
-    } catch {
-      // Ignore errors on initial state check
-    }
-  };
-
   const clearError = useCallback(() => setError(null), []);
 
   return (
@@ -297,7 +282,7 @@ function App() {
                         lastChecked: null,
                       }}
                       onToggle={() => setSettings((prev) => ({ ...prev, isPrivate: !prev.isPrivate }))}
-                      onRefresh={() => {}}}
+                      onRefresh={() => {}}
                     />
                   </div>
                 </div>
