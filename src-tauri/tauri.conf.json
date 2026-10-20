@@ -1,5 +1,4 @@
 {
-  "packageName": "ghatakai",
   "productName": "GhataKai",
   "version": "0.1.0",
   "identifier": "com.ghatakai.app",
@@ -7,9 +6,7 @@
     "frontendDist": "../target/dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build",
-    "useCustomBuildCommand": true,
-    "rustupToolchain": null
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
     "windows": [
