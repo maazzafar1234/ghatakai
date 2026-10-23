@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { MessageCircle, Send, AlertCircle } from 'lucide-react';
-import {
+import { MessageCircle, Send, AlertCircle, Loader2 } from 'lucide-react';import {
   ConversationSession,
   CloudSTTConfig,
   CloudLLMConfig,
@@ -33,51 +32,16 @@ export function AIPanel({
     setInput('');
   };
 
-  const renderMessages = () => {
-    if (!session || session.messages.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-          <MessageCircle className="w-12 h-12 mb-3" />
-          <p>No conversation yet. Start by asking a question.</p>
-        </div>
-      );
-    }
-    return (
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {session.messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex gap-3 max-w-[85%] ${
-              msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
-            }`}
-          >
-            <div
-              className={`px-3 py-2 rounded-lg ${
-                msg.role === 'user'
-                  ? 'bg-gk-600 text-white dark:bg-gk-600'
-                  : 'bg-slate-200 text-slate-900 dark:bg-slate-800 dark:text-slate-100'
-              }`}
-            >
-              <p className="text-sm">{msg.content}</p>
-              <span className="text-[10px] opacity-60 block mt-1">
-                {msg.role === 'user' ? 'You' : 'GhataKai'}
-                {msg.transcriptContext ? ' • from transcript' : ''}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
+  const isConnected = sttConfig.provider !== 'none' && llmConfig.provider !== 'none';
 
   return (
-    <div className="flex flex-col h-full border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-900 overflow-hidden">
+    <div className="flex flex-col h-full border border-slate-200 rounded-gk-lg bg-white dark:border-slate-800 dark:bg-slate-900 overflow-hidden shadow-sm">
       {/* Header */}
-      <div className="p-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
+      <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-gk-100 dark:bg-gk-900 flex items-center justify-center text-gk-600 dark:text-gk-400">
-              <MessageCircle className="w-4 h-4" />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-gk-sm bg-gk-primary/10 flex items-center justify-center text-gk-600 dark:text-gk-400">
+              <MessageCircle className="w-5 h-5" />
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -90,10 +54,12 @@ export function AIPanel({
           </div>
           <div className="flex items-center gap-2">
             <span
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs ${
+              className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${
                 aiStatus.stt === 'disabled' && aiStatus.llm === 'disabled'
                   ? 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
-                  : 'bg-gk-100 text-gk-700 dark:bg-gk-900 dark:text-gk-300'
+                  : isConnected
+                  ? 'bg-gk-accent-light text-gk-accent/700 dark:bg-accent-100 dark:text-accent-400'
+                  : 'bg-red-50 text-red-700 dark:bg-red-900/10 dark:text-red-400'
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${
@@ -101,7 +67,7 @@ export function AIPanel({
                   ? 'bg-red-500 animate-pulse'
                   : 'bg-gk-600'
               }`} />
-              AI ready
+              {aiStatus.stt === 'disabled' && aiStatus.llm === 'disabled' ? 'Not configured' : isConnected ? 'Connected' : 'Partially configured'}
             </span>
           </div>
         </div>
@@ -111,51 +77,75 @@ export function AIPanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {session?.messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <MessageCircle className="w-12 h-12 text-slate-400 mb-3" />
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              No conversation yet. Start by asking a question about your transcript.
+            <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4 dark:bg-slate-800 dark:text-slate-500">
+              <MessageCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-1">
+              No conversation yet
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Start by asking a question about your transcript.
             </p>
           </div>
         ) : (
-          renderMessages()
+          <div className="space-y-4">
+            {session?.messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`gk-message ${msg.role === 'user' ? 'gk-message-user' : 'gk-message-ai'}`}
+              >
+                <div className="gk-message-content">
+                  <p className="text-sm leading-relaxed">{msg.content}</p>
+                  <span className="gk-message-meta">
+                    {msg.role === 'user' ? 'You' : 'GhataKai'}
+                    {msg.transcriptContext ? ' &bull; from transcript' : ''}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
       {/* Input */}
-      <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
+      <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask about your transcript..."
-            disabled={loading}
+            placeholder="Ask about your transcript…"
+            disabled={loading || !isConnected}
             className="gk-input flex-1 text-sm"
           />
           <button
             type="submit"
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || loading || !isConnected}
             className="gk-btn-primary text-xs"
           >
             {loading ? (
-              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="ml-1">Sending…</span>
+              </>
+            ) : !isConnected ? (
+              <>
+                <AlertCircle className="w-4 h-4" />
+                <span className="ml-1">Configure AI</span>
+              </>
             ) : (
-              <Send className="w-3 h-3" />
+              <>
+                <Send className="w-4 h-4" />
+                <span className="ml-1">Send</span>
+              </>
             )}
           </button>
         </form>
       </div>
 
       {/* Cloud integration status */}
-      <div className="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800">
-        <div className="space-y-2">
+      <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-500 dark:text-slate-400">STT Provider</span>
             <span className="text-xs font-medium text-slate-900 dark:text-slate-100 truncate max-w-xs">
@@ -172,6 +162,12 @@ export function AIPanel({
             <div className="flex items-center gap-2 text-xs text-red-600 dark:text-red-400">
               <AlertCircle className="w-3 h-3" />
               <span>{aiStatus.lastError}</span>
+            </div>
+          )}
+          {!isConnected && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <AlertCircle className="w-3 h-3 text-slate-400" />
+              <span>Configure STT and LLM providers in Settings to enable AI assistance.</span>
             </div>
           )}
         </div>
