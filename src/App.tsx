@@ -39,6 +39,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<AudioDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [permission, _setPermission] = useState<'granted' | 'denied' | 'unknown'>('unknown');
   const [settings, setSettings] = useState<AppSettings>({
     theme: 'light',
     overlayOpacity: 45,
@@ -52,7 +53,6 @@ function App() {
 
   const currentSession = useMemo(() => conversationStore.getCurrentSession(), [currentSessionId]);
 
-  // Cloud AI hooks
   const {
     status: aiStatus,
     sttConfig,
@@ -162,30 +162,40 @@ function App() {
   const clearError = useCallback(() => setError(null), []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-gk-bg">
+    <div className="min-h-screen flex flex-col bg-white dark:bg-slate-950">
       <TopBar onMenu={() => {}} />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar activePath={`/${view}`} onNav={(path: string) => setView(path as View)} />
-        <div className="flex-1 flex flex-col overflow-hidden bg-gk-bg">
+        <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-slate-950">
           <main className="flex-1 overflow-y-auto p-6 lg:p-8">
             {view === 'transcript' && (
               <div className="space-y-6">
                 <div>
-                  <h1 className="text-2xl font-bold text-gk-text">Transcript</h1>
-                  <p className="text-sm text-gk-text-muted mt-1">
+                  <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    Transcript
+                  </h1>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                     View and manage your transcript entries.
                   </p>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 gk-card">
-                    <div className="p-4 border-b border-gk-border/50">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800/50">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-medium text-gk-text">Live transcript</h3>
-                        <span className="text-xs font-medium uppercase tracking-wider text-gk-primary">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          Live transcript
+                        </h3>
+                        <span className="text-xs font-medium uppercase tracking-wider text-gk-600 dark:text-gk-400">
                           Sample data — STT not yet integrated
                         </span>
                       </div>
-                      <TranscriptPanel entries={[]} recording={recording} />
+                      <TranscriptPanel
+                        entries={[]}
+                        recording={recording}
+                        devices={devices.length}
+                        permission={permission}
+                        error={error}
+                      />
                     </div>
                   </div>
                   <div className="lg:col-span-1">
@@ -200,19 +210,19 @@ function App() {
                     />
                     <StatusBar
                       recording={recording}
-                      permission={settings.isPrivate ? 'granted' : 'unknown'}
+                      permission={permission}
                       error={error}
                       devices={devices.length}
                     />
                   </div>
                 </div>
                 {error && (
-                  <div className="rounded-gk bg-red-50 border border-red-100 p-4 text-sm text-red-800 flex items-start gap-3">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <div className="gk-error-banner">
+                    <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
                     <span>{error}</span>
                     <button
                       onClick={clearError}
-                      className="ml-2 text-xs text-red-600 hover:underline"
+                      className="ml-auto text-xs text-red-600 dark:text-red-400 hover:underline"
                     >
                       Dismiss
                     </button>
@@ -244,8 +254,10 @@ function App() {
             {view === 'settings' && (
               <div className="space-y-6 max-w-4xl">
                 <div>
-                  <h1 className="text-2xl font-bold text-gk-text">Settings</h1>
-                  <p className="text-sm text-gk-text-muted mt-1">
+                  <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    Settings
+                  </h1>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                     Configure appearance, audio, privacy, and AI integration options.
                   </p>
                 </div>
