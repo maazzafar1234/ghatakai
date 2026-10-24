@@ -9,6 +9,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    port: 1420,
+    watch: {
+      ignored: ['**/src-tauri/target/**', '**/node_modules/**'],
+    },
+  },
   build: {
     outDir: '../src-tauri/target/dist',
     emptyOutDir: true,
