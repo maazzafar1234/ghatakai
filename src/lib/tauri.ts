@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 export interface AudioDevice {
@@ -14,6 +14,16 @@ export interface Settings {
   microphoneDeviceId: string | null;
   isPrivate: boolean;
   isTranscriptOpen: boolean;
+}
+
+export interface TranscriptionPayload {
+  text: string;
+  language: string;
+  timestamp: string;
+}
+
+export interface WhisperModelStatus {
+  isReady: boolean;
 }
 
 export async function getAudioDevices(): Promise<AudioDevice[]> {
@@ -42,6 +52,22 @@ export async function saveSettings(settings: Partial<Settings>): Promise<void> {
 
 export async function toggleTranscript(open: boolean): Promise<void> {
   return invoke('toggle_transcript', { open });
+}
+
+export async function loadWhisperModel(modelPath: string): Promise<void> {
+  return invoke('load_whisper_model', { modelPath });
+}
+
+export async function isSttReady(): Promise<boolean> {
+  return invoke<boolean>('is_stt_ready');
+}
+
+export async function transcribeAudio(): Promise<TranscriptionPayload> {
+  return invoke<TranscriptionPayload>('transcribe_audio');
+}
+
+export async function getAudioBufferLen(): Promise<number> {
+  return invoke<number>('get_audio_buffer_len');
 }
 
 export type TranscriptEntry = {
