@@ -34,7 +34,8 @@ impl WhisperModel {
     }
 
     pub fn transcribe(&self, audio_samples: &[f32]) -> Result<TranscriptionResult, String> {
-        let context = self.context.lock().unwrap()
+        let guard = self.context.lock().unwrap();
+        let context = guard
             .as_ref()
             .ok_or("Whisper model not loaded. Load a model first using load_whisper_model.")?;
 
@@ -47,9 +48,12 @@ impl WhisperModel {
             .map_err(|e| format!("Transcription failed: {}", e))?;
 
         let mut text = String::new();
-        let num_segments = state.full_n_segments();
+        let num_segments = state
+            .full_n_segments()
+            .map_err(|e| format!("Failed to get segment count: {}", e))?;
         for i in 0..num_segments {
-            let segment = state.full_segment_text(i)
+            let segment = state
+                .full_get_segment_text(i)
                 .map_err(|e| format!("Failed to get segment text: {}", e))?;
             if !segment.is_empty() {
                 text.push_str(&segment);

@@ -1,6 +1,6 @@
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDevice {
@@ -50,6 +50,7 @@ impl AudioBuffer {
         self.samples.lock().unwrap().len()
     }
 
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.samples.lock().unwrap().is_empty()
     }
@@ -57,14 +58,14 @@ impl AudioBuffer {
 
 pub struct RecordingState {
     stream: Mutex<Option<StreamWrapper>>,
-    audio_buffer: AudioBuffer,
+    audio_buffer: Arc<AudioBuffer>,
 }
 
 impl Default for RecordingState {
     fn default() -> Self {
         Self {
             stream: Mutex::new(None),
-            audio_buffer: AudioBuffer::default(),
+            audio_buffer: Arc::new(AudioBuffer::default()),
         }
     }
 }
@@ -82,6 +83,7 @@ impl RecordingState {
         self.stream.lock().unwrap().take()
     }
 
+    #[allow(dead_code)]
     pub fn push_audio_sample(&self, sample: f32) {
         self.audio_buffer.push(sample);
     }
@@ -134,44 +136,53 @@ pub fn start_recording(device_id: Option<String>, state: &RecordingState) -> Res
 
     let err_fn = |err| eprintln!("Input stream error: {}", err);
 
-    let state_clone = state.clone(); // Not needed, state is &RecordingState
+    let buffer = state.audio_buffer.clone();
 
     let stream = match config.sample_format() {
-        cpal::SampleFormat::F32 => device.build_input_stream(
-            &config.into(),
-            move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                // Collect audio samples for transcription
-                for &sample in data {
-                    state.push_audio_sample(sample);
-                }
-            },
-            err_fn,
-            None,
-        ),
-        cpal::SampleFormat::I16 => device.build_input_stream(
-            &config.into(),
-            move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                // Convert i16 to f32 for collection
-                for &sample in data {
-                    let f_sample = sample as f32 / i16::MAX as f32;
-                    state.push_audio_sample(f_sample);
-                }
-            },
-            err_fn,
-            None,
-        ),
-        cpal::SampleFormat::U16 => device.build_input_stream(
-            &config.into(),
-            move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                // Convert u16 to f32 for collection
-                for &sample in data {
-                    let f_sample = (sample as i32 - i16::MAX as i32) as f32 / i16::MAX as f32;
-                    state.push_audio_sample(f_sample);
-                }
-            },
-            err_fn,
-            None,
-        ),
+        cpal::SampleFormat::F32 => {
+            let buffer = buffer.clone();
+            device.build_input_stream(
+                &config.into(),
+                move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                    // Collect audio samples for transcription
+                    for &sample in data {
+                        buffer.push(sample);
+                    }
+                },
+                err_fn,
+                None,
+            )
+        }
+        cpal::SampleFormat::I16 => {
+            let buffer = buffer.clone();
+            device.build_input_stream(
+                &config.into(),
+                move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                    // Convert i16 to f32 for collection
+                    for &sample in data {
+                        let f_sample = sample as f32 / i16::MAX as f32;
+                        buffer.push(f_sample);
+                    }
+                },
+                err_fn,
+                None,
+            )
+        }
+        cpal::SampleFormat::U16 => {
+            let buffer = buffer.clone();
+            device.build_input_stream(
+                &config.into(),
+                move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                    // Convert u16 to f32 for collection
+                    for &sample in data {
+                        let f_sample = (sample as i32 - i16::MAX as i32) as f32 / i16::MAX as f32;
+                        buffer.push(f_sample);
+                    }
+                },
+                err_fn,
+                None,
+            )
+        }
         _ => {
             return Err(format!(
                 "Unsupported audio sample format: {:?}",
